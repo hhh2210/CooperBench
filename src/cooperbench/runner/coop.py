@@ -1,6 +1,7 @@
 """Coop mode execution - multiple agents collaborate on separate features."""
 
 import json
+import math
 import re
 import threading
 import uuid
@@ -30,7 +31,7 @@ def _message_timestamp_key(msg: dict) -> float:
     ``agent{fid}_traj.json`` was written, leaving callers with no structured
     output to evaluate.
 
-    Missing or unparseable values stay ``0.0``. Do not invent a timestamp
+    Missing, non-finite, or unparseable values stay ``0.0``. Do not invent a timestamp
     for a historical record that never had one. ``Z`` is accepted on
     Python 3.10, whose ``fromisoformat`` rejects that suffix.
     """
@@ -38,14 +39,16 @@ def _message_timestamp_key(msg: dict) -> float:
     if ts is None or isinstance(ts, bool):
         return 0.0
     if isinstance(ts, (int, float)):
-        return float(ts)
+        value = float(ts)
+        return value if math.isfinite(value) else 0.0
     if not isinstance(ts, str):
         return 0.0
     text = ts.strip()
     if not text:
         return 0.0
     try:
-        return float(text)
+        value = float(text)
+        return value if math.isfinite(value) else 0.0
     except ValueError:
         pass
     try:

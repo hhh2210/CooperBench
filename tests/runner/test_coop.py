@@ -1,5 +1,7 @@
 """Unit tests for cooperbench.runner.coop module."""
 
+import pytest
+
 from cooperbench.runner.coop import _extract_conversation, _message_timestamp_key
 
 
@@ -115,6 +117,39 @@ class TestSortDoesNotCrashOnMixedTimestampTypes:
         ]
         sorted_msgs = self._sort_like_production(conversation)
         assert [m["message"] for m in sorted_msgs] == ["bad", "later"]
+
+    @pytest.mark.parametrize(
+        "timestamp", [float("nan"), float("inf"), float("-inf"), "nan", "inf", "-inf", "  NaN  ", "1e999"]
+    )
+    def test_nonfinite_timestamp_falls_back_to_zero(self, timestamp):
+        assert _message_timestamp_key({"timestamp": timestamp}) == 0.0
+
+    def test_nonfinite_timestamps_keep_stable_missing_group_in_mixed_sort(self):
+        conversation = [
+            {"message": "later", "timestamp": "1970-01-01T00:00:03Z"},
+            {"message": "nan", "timestamp": float("nan")},
+            {"message": "earlier", "timestamp": 1.0},
+            {"message": "missing"},
+            {"message": "infinity", "timestamp": "inf"},
+            {"message": "middle", "timestamp": "2"},
+            {"message": "negative-infinity", "timestamp": float("-inf")},
+        ]
+
+        sorted_msgs = self._sort_like_production(conversation)
+
+        assert [m["message"] for m in sorted_msgs] == [
+            "nan",
+            "missing",
+            "infinity",
+            "negative-infinity",
+            "earlier",
+            "middle",
+            "later",
+        ]
+
+    def test_iso_offsets_represent_the_same_utc_instant(self):
+        assert _message_timestamp_key({"timestamp": "1970-01-01T08:00:01+08:00"}) == 1.0
+        assert _message_timestamp_key({"timestamp": "1970-01-01T00:00:01Z"}) == 1.0
 
     def test_received_messages_excluded_before_sort(self):
         """Received entries must be filtered out before the sort, not after —
