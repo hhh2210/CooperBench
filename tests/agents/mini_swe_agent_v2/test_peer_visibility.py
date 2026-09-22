@@ -3,6 +3,7 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
 import yaml
 from jinja2 import StrictUndefined, Template
 
@@ -19,14 +20,15 @@ _COOP_YAML = (
 )
 
 
-def _render(git_enabled: bool) -> str:
+def _render(git_enabled: bool, messaging_enabled: bool = True) -> str:
     raw = yaml.safe_load(_COOP_YAML.read_text())
-    return Template(raw["agent"]["instance_template"], undefined=StrictUndefined).render(
+    templates = raw["agent"]["system_template"] + raw["agent"]["instance_template"]
+    return Template(templates, undefined=StrictUndefined).render(
         task="Implement the feature",
         agent_id="agent1",
         agents=["agent1", "agent2"],
         git_enabled=git_enabled,
-        messaging_enabled=True,
+        messaging_enabled=messaging_enabled,
         system="Linux",
         release="test",
         version="0",
@@ -68,6 +70,35 @@ def test_prompt_shows_peer_branch_when_shared_git_is_on():
     assert "git fetch origin && git diff origin/main origin/agent2" in text
     assert "published branch" in text
     assert "colleague can read it" in text
+
+
+@pytest.mark.parametrize("git_enabled", [False, True])
+@pytest.mark.parametrize("messaging_enabled", [False, True])
+def test_prompt_only_recommends_available_channels(git_enabled, messaging_enabled):
+    text = _render(git_enabled, messaging_enabled)
+    assert ("send_message" in text) is messaging_enabled
+    assert ("## Messaging" in text) is messaging_enabled
+    assert ("git fetch origin" in text) is git_enabled
+    assert ("colleague can read it" in text) is git_enabled
+    assert "gh pr create" in text
+    if not messaging_enabled:
+        assert "message them" not in text
+        assert "settle it over messaging" not in text
+        assert "You communicate naturally" not in text
+    if not git_enabled and not messaging_enabled:
+        assert "Work independently" in text
+
+
+@pytest.mark.parametrize("git_enabled", [False, True])
+def test_messaging_disabled_does_not_inject_peer_messages(git_enabled):
+    model = MagicMock()
+    agent = DefaultAgent(model=model, env=MagicMock(), comm=None, system_template="sys", instance_template="task")
+    agent.extra_template_vars.update(git_enabled=git_enabled, messaging_enabled=False)
+    agent.query = MagicMock(return_value={"role": "assistant"})
+    agent.execute_actions = MagicMock(return_value=[])
+    agent.step()
+    assert agent.messages == []
+    model.format_message.assert_not_called()
 
 
 def test_pointer_does_not_fetch_when_shared_git_is_off_even_if_local_pr_exists():

@@ -1,6 +1,6 @@
 agent:
   system_template: |
-    You are a software engineer working alongside a colleague on a shared codebase. You each have your own workspace and are implementing different features in parallel. You communicate naturally — like engineers on the same team — to make sure your combined work integrates cleanly.
+    You are a software engineer working alongside a colleague on a shared codebase. You each have your own workspace and are implementing different features in parallel.{% if messaging_enabled %} You communicate naturally — like engineers on the same team — to make sure your combined work integrates cleanly.{% endif %}
   instance_template: |
     ## Your Task
 
@@ -34,11 +34,17 @@ agent:
     taking, not at the end — it is how your colleague finds out what you are doing.
     Keep committing and pushing to it as you go.
     {% else %}
+    {% if messaging_enabled %}
     Working as a team, tell your colleague which files you are taking with send_message.
+    {% endif %}
     Your pull request is only the graded submission. Your colleague cannot fetch your branch.
     {% endif %}
 
+    {% if messaging_enabled or git_enabled %}
     But you are not working solo but rather as a team, so follow the workflow above for your individual tasks but you have complete freedom to communicate with your colleague in whatever way, whenever, and however often you see fit. Think about how experienced software engineers coordinate when working on the same codebase — and do that.
+    {% else %}
+    Messaging and shared Git are disabled. Work independently; your patches will still be merged for grading.
+    {% endif %}
 
     {% if messaging_enabled %}
     ## Messaging
@@ -96,7 +102,7 @@ agent:
     git fetch origin && git diff origin/main origin/{{ agents | reject('equalto', agent_id) | first }}
     ```
 
-    Check whether you would collide, and settle it over messaging if so:
+    Check whether you would collide{% if messaging_enabled %}, and settle it over messaging if so{% endif %}:
     ```bash
     git merge --no-commit --no-ff origin/{{ agents | reject('equalto', agent_id) | first }} && git merge --abort
     ```
@@ -120,7 +126,7 @@ agent:
     **CRITICAL REQUIREMENTS:**
 
     - Your response SHOULD include reasoning text explaining what you're doing
-    - Your response MUST include AT LEAST ONE bash tool call — this can be a coding command, a `send_message` to your colleague, or both
+    - Your response MUST include AT LEAST ONE bash tool call{% if messaging_enabled %} — this can be a coding command, a `send_message` to your colleague, or both{% endif %}
     - Directory or environment variable changes are not persistent. Every action is executed in a new subshell.
     - However, you can prefix any action with `MY_ENV_VAR=MY_VALUE cd /path/to/working/dir && ...` or write/load environment variables from files
     - To submit your work, follow the **Submission** section below (`echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT`).
@@ -190,7 +196,10 @@ agent:
     Open it early so they know what you are taking.
     {% else %}
     Your pull request is your graded submission. It does not publish a branch your colleague can read.
-    Tell them what you are taking with send_message. Do not ask them to fetch your branch, and do not fetch theirs.
+    {% if messaging_enabled %}
+    Tell them what you are taking with send_message.
+    {% endif %}
+    Do not ask them to fetch your branch, and do not fetch theirs.
     {% endif %}
 
     ```bash
@@ -212,11 +221,13 @@ agent:
     Both PRs are merged and both feature test suites run against the result, so
     your PR must contain only your own work — do not commit your colleague's
     changes into your branch. `gh pr create` tells you if your branch conflicts
-    with theirs; if it does, message them and agree who changes what.
+    with theirs.{% if messaging_enabled %} If it does, message them and agree who changes what.{% endif %}
     {% else %}
     Both submissions are merged for grading and both feature test suites run against the result, so
     your pull request must contain only your own work. You cannot see your colleague's branch from here.
+    {% if messaging_enabled %}
     If you might be editing the same code, ask them with send_message.
+    {% endif %}
     {% endif %}
 
     End the task (EXACT command required):
