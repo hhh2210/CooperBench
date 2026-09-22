@@ -80,10 +80,41 @@ class TestSortDoesNotCrashOnMixedTimestampTypes:
         sorted_msgs = self._sort_like_production(conversation)
         # All five sent rows preserved (none received-flagged).
         assert len(sorted_msgs) == 5
-        # Numeric timestamps sort in order; unparseable strings + None +
-        # missing all coerce to 0.0 and end up at the front (stable order).
-        floats = [float(m["timestamp"]) for m in sorted_msgs if isinstance(m.get("timestamp"), (int, float))]
-        assert floats == sorted(floats)
+        # None and missing stay 0 and keep their relative order. Numeric
+        # values sort numerically. An ISO timestamp sorts by its instant,
+        # not as 0.
+        assert [m["message"] for m in sorted_msgs] == ["d", "e", "a", "c", "b"]
+
+    def test_iso_reply_sorts_after_the_message_it_answers(self):
+        """A reply recorded later must not be exported ahead of the send it answers.
+
+        The old key did ``float(ts)`` and mapped ISO strings to 0, so a
+        sender-grouped stable sort put the reply first.
+        """
+        conversation = [
+            {
+                "from": "agent2",
+                "to": "agent1",
+                "message": "reply",
+                "timestamp": "2026-05-13T22:47:05Z",
+            },
+            {
+                "from": "agent1",
+                "to": "agent2",
+                "message": "ask",
+                "timestamp": "2026-05-13T22:47:00+00:00",
+            },
+        ]
+        sorted_msgs = self._sort_like_production(conversation)
+        assert [m["message"] for m in sorted_msgs] == ["ask", "reply"]
+
+    def test_garbage_timestamp_still_sorts_as_zero(self):
+        conversation = [
+            {"from": "agent1", "to": "agent2", "message": "later", "timestamp": 2.0},
+            {"from": "agent2", "to": "agent1", "message": "bad", "timestamp": "not-a-time"},
+        ]
+        sorted_msgs = self._sort_like_production(conversation)
+        assert [m["message"] for m in sorted_msgs] == ["bad", "later"]
 
     def test_received_messages_excluded_before_sort(self):
         """Received entries must be filtered out before the sort, not after —
